@@ -1,0 +1,6 @@
+---
+- include: jenkins.yml
+- include: nexus.yml
+- include: tomcat1.yml
+- include: tomcat2.yml
+- include: tomcat3.yml
