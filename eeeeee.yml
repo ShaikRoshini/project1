@@ -61,9 +61,9 @@
            Name: web02
            owner: admin
          exact_count: 1
-         count_tag: 
+         count_tag:
            Name: web02
-           owner: admin
+           Owner: admin
          monitoring: no
          vpc_subnet_id: "{{vpc_subnet_id}}"
          assign_public_ip: yes
@@ -71,29 +71,23 @@
       register: ec2_out
 
     - debug: 
-        msg: "{{ec2_out.instances[0].id}}"
-      ignore_errors: true
-    - debug: 
         msg: "{{ec2_out.instances[0].public_ip}}"
-      ignore_errors: true
     - name: wait for SSH to comeup
       wait_for: host={{ec2_out.instances[0].public_ip}} port=22 delay=60 timeout=320 state=started
-      ignore_errors: true
 
 
     - name: add server ip addresses to hosts group
       add_host:
-        hostname: "{{ec2_out.instances[0].public_ip}}" 
+        hostname: web02
         ansible_ssh_host: "{{ec2_out.instances[0].public_ip}}"
         ansible_ssh_user: ubuntu
-        ansible_ssh_private_key_file: web02key.pem
+        ansible_ssh_private_key_file: web02key
         ansible_python_interpreter: /usr/bin/python2.7
-        host_key_checking: False
         groups: webserver
 
 
 - name: configure the webservers
-  hosts: webserver
+  hosts: web02
   remote_user: ubuntu
   become: True
   become_method: sudo
@@ -107,8 +101,8 @@
         name: "{{item}}"
         state: latest
       with_items:
-        - python-pip
-        - python-dev
+         - python-pip
+         - python-dev
 
 
     - name: installing httpd package
@@ -121,25 +115,6 @@
         dest: /var/www/html/index.html
     - name: start apache2 service
       service: 
-        name: apache2 
-        state: restarted
-
-- hosts: localhost
-  connection: local
-  become: yes
-  remote_user: root
-  gather_facts: False
-  vars_files:
-    - awscreds
-  post_tasks:
-    - name: add the  web02 instance to the load balancer
-      ec2_elb:
-        aws_access_key: "{{access_id}}"
-        aws_secret_key: "{{secret_key}}"
-        state: present
-        ec2_elbs: aws-classicelb 
-        region: "{{region}}"
-        instance_id:  "{{ec2_out.instances[0].id}}"
-        wait: yes
-
+        name: httpd 
+        state: started
 
