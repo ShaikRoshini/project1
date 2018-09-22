@@ -1,0 +1,13 @@
+---
+- hosts: all
+  become: yes
+  tasks:
+    - name: update hosts file
+      blockinfile:
+        path: /etc/hosts
+        block: |
+         172.31.18.4 jenkins
+         172.31.30.191 nexus
+         172.31.28.42 tomcat1
+         172.31.21.3 tomcat2
+         172.31.26.118 tomcat3
