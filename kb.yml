@@ -1,0 +1,118 @@
+--- 
+- hosts: localhost
+  connection: local
+  become: yes
+  remote_user: root
+  gather_facts: False
+  vars:
+    access_key: AKIAJWSMXFXLOIREJAUQ
+    secret_key:  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
+    ami_id: ami-a4dc46db
+    region: us-east-1
+
+##### create security group #####
+  tasks:
+    - name: create security group for kubecluster
+      ec2_group:
+        name: kubcluster-SG
+        description: this is security group for kubcluster
+        aws_access_key: "{{access_key}}"
+        aws_secret_key: "{{secret_key}}"
+        region: "{{region}}"
+        rules:
+          - proto: tcp
+            from_port: 22
+            to_port: 22
+            cidr_ip: 0.0.0.0/0
+
+#### create a KEY PAIR for kubecluster #####
+    - name: create a kubecluster key
+      ec2_key:
+        name: kube_key
+        aws_access_key: "{{access_key}}"
+        aws_secret_key: "{{secret_key}}"
+        region: "{{region}}"
+      register: kube_key
+
+    - debug:
+        msg: "{{kube_key.key.private_key}}"
+      ignore_errors: true
+
+    - name: save the private key
+      copy: 
+        content: "{{kube_key.key.private_key}}\n"
+        dest: "./kube_key.pem"
+        mode: 0600
+      when: kube_key.changed
+      ignore_errors: true
+
+#### create S3 Bucket for Kubecluster #####
+    - name: create an S3 Bucket 
+      s3_bucket:
+        aws_access_key: "{{access_key}}"
+        aws_secret_key: "{{secret_key}}"
+        region: "{{region}}"
+        name: kuberncuste     #(change the bucket name everytime you run the playbook,it should be unique)
+        state: present
+        versioning: yes
+      register: s3_bucket
+      ignore_errors: true
+
+    - debug: var=s3_bucket
+
+################# IAM GROUP CREATION ###################
+    - name: Creating  IAM Group
+      iam:
+        aws_access_key: "{{access_key}}"
+        aws_secret_key: "{{secret_key}}"
+        region: "{{region}}"
+        iam_type: group 
+        name: administrators  
+        state: present
+
+######################## POLICY CREATION --##################################
+    - name: creating admin access
+      iam_policy:
+        iam_type: group    
+        iam_name: administrators  
+        policy_name: Admin
+        state: present
+        aws_access_key: "{{access_key}}"
+        aws_secret_key: "{{secret_key}}"
+        region: "{{region}}"
+        validate_certs: yes
+        policy_document: admin.json
+      
+##################--IAM USER CREATION--###################################      
+    - name: Create  IAM User and add users into group(administrators)
+      iam:
+        aws_access_key: "{{access_key}}"
+        aws_secret_key: "{{secret_key}}"
+        region: "{{region}}"
+        iam_type: user
+        name: testuser
+        state: present
+        groups: administrators
+        password: "test"
+        access_key_state: create
+      register: user
+    - name: Show the JSON Results
+      debug: var=user
+
+    - debug:
+        msg: "{{user.user_meta.access_keys}}"
+
+
+
+############### CREATE ROUTE53###############
+    - name: Create route53
+      route53_zone:
+        aws_access_key: "{{access_key}}"
+        aws_secret_key: "{{secret_key}}"
+        region: "{{region}}"
+        zone: examplesandhyareddy.com
+        state: present
+        comment: tzs an example
+      register: route53
+  
+    - debug: var=route53
