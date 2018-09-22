@@ -1,0 +1,26 @@
+
+
+
+
+
+
+[vprohosts]
+jenkins
+nexus
+tomcat1
+tomcat2
+tomcat3
+
+
+
+
+
+
+
+[vprohosts:vars]
+ansible_ssh_user=ubuntu
+ansible_ssh_private_key_file=jenkins_key.pem
+#ansible_python_interpreter=/usr/bin/python2.7
+ansible_python_interpreter=/usr/bin/python3
+                                                             38,1          Bot
+
