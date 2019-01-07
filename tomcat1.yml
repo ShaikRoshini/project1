@@ -1,0 +1,126 @@
+---
+- hosts: localhost
+  connection: localhost
+  remote_user: root
+  gather_facts: no
+  vars:
+    access_key: AKIAJVWGCCC3UJV4ABSA
+    secret_key: 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
+    inventory_file: int-dev
+
+  tasks:
+    - name: creating security group for tomcat1 server
+      ec2_group:
+        name: tomcat1-SG
+        description: this is security group for jenkins
+        aws_access_key: "{{access_key}}"
+        aws_secret_key: "{{secret_key}}"
+        region: us-east-1
+        rules:
+          - proto: tcp
+            from_port: 8080
+            to_port: 8080
+            cidr_ip: 0.0.0.0/0
+          - proto: tcp
+            from_port: 22
+            to_port: 22
+            cidr_ip: 0.0.0.0/0
+    
+    - name: create a jenkins key
+      ec2_key: 
+        name: jenkins_key
+        aws_access_key: "{{access_key}}"
+        aws_secret_key: "{{secret_key}}"
+        region: us-east-1
+      register: jenkins_key
+
+    - debug: 
+        msg: "{{jenkins_key.key.private_key}}"
+      ignore_errors: true
+
+
+    - name: save private key
+      copy:
+        content: "{{jenkins_key.key.private_key}}\n"
+        dest: "./jenkins_key.pem"
+        mode: 0600
+      when: jenkins_key.changed
+      ignore_errors: true
+
+
+    - name: create EC2 instance
+      ec2:
+        key_name: jenkins_key
+        instance_type: t2.micro
+        aws_access_key: "{{access_key}}" 
+        aws_secret_key: "{{secret_key}}"
+        region: us-east-1
+        image: ami-43a15f3e
+        wait: yes
+        wait_timeout: 500
+        count: 1
+        instance_tags:
+             Name: tomcat1
+             owner: admin
+        monitoring: no 
+        vpc_subnet_id: subnet-2a396077
+        assign_public_ip: yes
+        group: tomcat1-SG
+      register: ec2_out
+      ignore_errors: true
+
+    - debug:
+        msg:  "{{ec2_out.instances[0].public_ip}}"
+    - name: name for ssh to comeup
+      wait_for: host={{ec2_out.instances[0].public_ip}} port=22 delay=60 timeout=500 state=started
+
+    - name: create int
+      shell:  echo "tomcat1 ansible_ssh_host="{{ec2_out.instances[0].public_ip}}""  > int-dev
+
+
+    - name: appending the file
+      shell:  cat invent-dev >> int-dev
+
+    - name: add instance ip to ansible grp
+      add_host:
+        hostname: tomcat1
+        ansible_ssh_host: "{{ec2_out.instances[0].public_ip}}"
+        ansible_ssh_user: ubuntu
+        groupname: vprohosts
+
+
+################################ INSTALLING TOMCAT ##################################
+
+- hosts: tomcat1
+  become: yes
+  gather_facts: true
+  tasks:
+    - name: install jdk
+      apt:
+        update_cache: yes
+        name: "{{item}}"
+        state: present
+      with_items:
+        - openjdk-8-jdk
+        - zip
+        - unzip
+      ignore_errors: yes
+
+    - name: wget the tomcat url
+      get_url:
+        url: http://redrockdigimark.com/apachemirror/tomcat/tomcat-8/v8.5.31/bin/apache-tomcat-8.5.31.tar.gz
+        dest: /opt/
+
+
+    - name: unzip the tomcat url
+      unarchive:
+        src: /opt/apache-tomcat-8.5.31.tar.gz
+        dest: /opt/
+        remote_src: yes
+
+    - name: start the tomcat
+      shell: echo /opt/apache-tomcat-8.5.31/bin/startup.sh
+
+
+
+

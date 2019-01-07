@@ -1,0 +1,42 @@
+---
+- hosts: kops
+  become: yes
+  remote_user: root
+  gather_facts: False
+  tasks:
+    - name: install kops
+      apt:
+        update_cache: yes
+        name: apt-transport-https
+        state: present
+
+    - name: import kops key
+      apt_key:
+        url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
+        state: present 
+    
+    - name: add repo
+      apt_repository:
+        repo: deb http://apt.kubernetes.io/ kubernetes-xenial main 
+        state: present 
+
+    - name: install kubectl
+      apt:
+        update_cache: yes
+        name: kubectl
+        state: present
+
+
+    - name: download the url
+      get_url:
+        url: https://github.com/kubernetes/kops/releases/download/1.9.0/kops-linux-amd64
+        dest: .
+        mode: 0644
+
+    - name: download the url for kops
+      get_url:
+        url: https://github.com/kubernetes/kops/releases/download/1.9.0/kops-darwin-amd64
+        dest: .
+        mode: 0644
+
+

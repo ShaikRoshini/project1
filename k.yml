@@ -1,0 +1,164 @@
+--- 
+- hosts: localhost
+  connection: local
+  become: yes
+  remote_user: root
+  gather_facts: False
+  vars:
+    access_key: AKIAJWSMXFXLOIREJAUQ
+    secret_key:  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
+    ami_id: ami-a4dc46db
+    region: us-east-1
+
+##### create security group #####
+  tasks:
+    - name: create security group for kubecluster
+      ec2_group:
+        name: kubcluster-SG
+        description: this is security group for kubcluster
+        aws_access_key: "{{access_key}}"
+        aws_secret_key: "{{secret_key}}"
+        region: "{{region}}"
+        rules:
+          - proto: tcp
+            from_port: 22
+            to_port: 22
+            cidr_ip: 0.0.0.0/0
+
+#### create a KEY PAIR for kubecluster #####
+    - name: create a kubecluster key
+      ec2_key:
+        name: kube_key
+        aws_access_key: "{{access_key}}"
+        aws_secret_key: "{{secret_key}}"
+        region: "{{region}}"
+      register: kube_key
+
+    - debug:
+        msg: "{{kube_key.key.private_key}}"
+      ignore_errors: true
+
+    - name: save the private key
+      copy: 
+        content: "{{kube_key.key.private_key}}\n"
+        dest: "./kube_key.pem"
+        mode: 0400
+      when: kube_key.changed
+      ignore_errors: true
+
+########## create S3 Bucket for Kubecluster #############
+    - name: create an S3 Bucket 
+      s3_bucket:
+        aws_access_key: "{{access_key}}"
+        aws_secret_key: "{{secret_key}}"
+        region: "{{region}}"
+        name: kuberncuste     #(change the bucket name everytime you run the playbook,it should be unique)
+        state: present
+        versioning: yes
+      register: s3_bucket
+      ignore_errors: true
+
+    - debug: var=s3_bucket
+
+
+############### CREATE ROUTE53###############
+    - name: Create route53
+      route53_zone:
+        aws_access_key: "{{access_key}}"
+        aws_secret_key: "{{secret_key}}"
+        region: "{{region}}"
+        zone: examplesandhyareddy.com
+        state: present
+        comment: tzs an example
+      register: route53
+  
+    - debug: var=route53
+          
+################# CREATE EC2 INSTANCE ##########
+
+    - name: create EC2 instance
+      ec2:
+        key_name: kube_key
+        instance_type: t2.micro
+        aws_access_key: "{{access_key}}" 
+        aws_secret_key: "{{secret_key}}"
+        region: "{{region}}"
+        image: "{{ami_id}}"
+        wait: yes
+        wait_timeout: 500
+        count: 1
+        instance_tags:
+             Name: kops
+             owner: admin
+        monitoring: no 
+        vpc_subnet_id: subnet-2a396077
+        assign_public_ip: yes
+        group: kubcluster-SG
+      register: ec2_out
+      ignore_errors: true
+
+    - debug:
+        msg:  "{{ec2_out.instances[0].public_ip}}"
+    - name: name for ssh to comeup
+      wait_for: host={{ec2_out.instances[0].public_ip}} port=22 delay=60 timeout=500 state=started
+
+    - name: create inventory file
+      shell:  echo "kops  ansible_ssh_host="{{ec2_out.instances[0].public_ip}}""  > int-dev
+
+
+    - name: appending the file
+      shell:  cat invent-dev >> int-dev
+
+    - name: add instance ip to ansible grp
+      add_host:
+        hostname: kops
+        ansible_ssh_host: "{{ec2_out.instances[0].public_ip}}"
+        ansible_ssh_user: ubuntu
+        groupname: vprohosts
+
+
+####################### INSTALLING KUBECTL  ##########################
+        
+- hosts: kops
+  become: yes
+  remote_user: root
+  gather_facts: False
+  tasks:
+    - name: install kops
+      apt:
+        update_cache: yes
+        name: apt-transport-https
+        state: present
+
+    - name: import kops key
+      apt_key:
+        url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
+        state: present 
+    
+    - name: add repo
+      apt_repository:
+        repo: deb http://apt.kubernetes.io/ kubernetes-xenial main 
+        state: present 
+
+    - name: install kubectl
+      apt:
+        update_cache: yes
+        name: kubectl
+        state: present
+
+
+############## INSTALL KOPS ###################
+
+    - name: download the url
+      get_url:
+        url: https://github.com/kubernetes/kops/releases/download/1.9.0/kops-linux-amd64
+        dest: .
+        mode: 0644
+
+    - name: download the url for kops
+      get_url:
+        url: https://github.com/kubernetes/kops/releases/download/1.9.0/kops-darwin-amd64
+        dest: .
+        mode: 0644
+
+

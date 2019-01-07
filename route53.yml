@@ -1,0 +1,26 @@
+
+--- # AWS S3 MODULE EXAMPLE
+- hosts: localhost
+  connection: local
+  remote_user: root
+  become: yes
+  gather_facts: True
+  vars:
+    access_key: AKIAJWSMXFXLOIREJAUQ
+    secret_key: bsMf8I1pP4B6MENZVeqE0uyMGEa3A//WHmS8pNtf
+    ami_id: ami-a4dc46db
+    region: us-east-1
+
+
+  tasks:
+  - name: Create route53
+    route53_zone:
+      aws_access_key: "{{access_key}}"
+      aws_secret_key: "{{secret_key}}"
+      region: "{{region}}"
+      zone: examplesandhyareddy.com
+      state: present
+      comment: tzs an example
+    register: route53
+
+  - debug: var=route53
